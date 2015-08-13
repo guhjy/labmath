@@ -1,96 +1,171 @@
-Ingredient <- setRefClass("Ingredient",
-    fields=c("name", "amount", "unit"),
-    methods=list(
-        convert=function(target.unit) {
-            target.amt <- convert(.self$amount, .self$unit, target.unit)
-            Ingredient(.self$name, target.amt, target.unit)
-        }
-    )
-)
+#Common solvents
+WATER = "water 1 g/ml"
 
-Solution <- setRefClass("Solution",
-    fields=c("name", "solvent", "solutes"),
-    methods=list(
-        dilute=function(solute=NULL, final.conc=NULL, final.vol=NULL) {
+#' Describe a solution in plain english.
+#' 
+#' @param ... one or more solutes, specified as concentrations 
+#' (see details).
+#' @param solvent the solvent used in the solution 
+#' (see details). Defaults to water.
+#' 
+#' @details 
+#' Each solute is a string of the form: "<amount> <unit> <name>",
+#' where `amount` is a value that can be converted to a real number
+#' using `as.numeric()`, `unit` is a unit of concentration, and `name` 
+#' is how you want the solute displayed. Valid units are:
+#' * %ww : percentage of solute as a fraction of total solution weight
+#' * %wv (or just %) : percentage of solute as a fraction of total volume
+#' * %vv : percentage of a liquid solute as a fraction of final 
+#' solution volume
+#' * M[<mw>] : molarity (moles/L), with the molecular weight of the
+#' solute specified in brackets. kM, mM, and uM are also recognized.
+#' 
+#' A solvent is a string of the form "<name> <amount> <w/v units>".
+recipe <- function(name, ..., solvent=WATER) {
+    solutes <- lapply(list(...), parse.solute)
+    solvent <- parse.solvent(solvent)
+    structure(list(name=name, solutes=solutes, solvent=solvent), class="recipe")
+}
 
+#' Create a recipe for making a certain volume of solution.
+make <- function(recipe, vol, ...) {
+    solution(
+        lapply(recipe$solutes, function(s) {
+            amount <- get.amount.for(s, recipe$solvent, vol, ...)
+            list(amount=amount, name=solute$name)
         },
+        parse.measure(vol), solvent$name
     )
-)
-
-
-#' Create a weight/weight (w/w) solution, given one or more
-#' solutes at certain percentages (specified as decimal fractions)
-#' a solvent, and a final volume.
-ww.solution <- function(solute.names, solute.pcts, solvent="water", wt.unit="g") {
-    stopifnot(length(solute.names) == length(solute.pcts))
-    solutes <- sapply(seq_along(solute.names), function(i) {
-        Ingredient(solute.names[i], )
-    })
 }
 
-#' Dilute a solution. You must specify three of the four parameters and the
-#' fourth will be calculated.
-#'
-#' @param conc concentration
-#' @param vol volume of solution
-#' @param final.conc desired final concentration, specified as a fraction
-#' @param final.vol desired final volume of solution
-dilute <- function(conc=NULL, vol=NULL, final.conc=NULL, final.vol=NULL,
-                   solute.name=NA, solvent.name=NA, vol.units=NA) {
-    args <- as.list(environment())
-    stopifnot(sum(unlist(lapply(args, is.null))) <= 1)
-    if (is.null(conc)) {
-        args$conc <- (final.vol - vol) * final.conc / vol
-    }
-    else if (is.null(vol)) {
-        args$vol <- (final.vol * final.conc) / (conc + final.conc)
-    }
-    else if (is.null(final.conc)) {
-        args$final.conc <- (vol * conc) / (final.vol - vol)
-    }
-    else if (is.null(final.vol)) {
-        args$final.vol <- ((vol * conc) / final.conc) + vol
-    }
-    class(args) <- "dilution"
-    args
+solution <- function(solutes, solvent.vol, solvent.name) {
+    structure(list(solutes=solutes, solvent.vol=solvent.vol, solvent.name=solvent.name), class="solution")
 }
 
-summary.dilution <- function(d, round.pct=0, round.vol=4) {
-    my.paste(round(d$vol, round.vol), d$vol.units, round(d$conc * 100, round.pct), "%", d$solute.name,
-             "+", round(d$final.vol - d$vol, round.vol), d$vol.units, d$solvent.name,
-             "=", round(d$final.vol, round.vol), d$vol.units, round(d$final.conc * 100, round.pct), "%", d$solute.name)
+#' Print a nicely formatted recipe.
+#' TODO: markdown
+print.recipe <- function(r, markdown=FALSE) {
+    print(paste("To make", r$solvent, r$name, ", combine:")
+    for (i in 1:length(r$solutes)) {
+        print(paste0(i, ". ", r$amount, " ", r$name))
+    }
+    print(paste("and bring to", r$solvent.vol, "with", r$solvent.name))
 }
 
-#' Compute weight(s) of solute(s) required to make a solution
-#' of a given volume, given the required molarity and the
-#' molecular weight(s) of the solute(s).
-molar.solution <- function(vol, mol, mw, solvent.name=NA, solute.names=NA,
-                           vol.units="L", mol.units="mol", mw.units="g") {
-    stopifnot(length(mol) == length(mw))
-    recipe <- list(solvent.name=solvent.name, solvent.vol=vol, solvent.units=vol.units,
-                   solute.names=solute.names, solute.units=mw.units)
-    if (vol.units != "L") {
-        vol <- convert(vol, vol.units, "L")
-    }
-    if (mol.units != "mol") {
-        mol <- convert(mol, mol.units, "mol")
-    }
-    if (mw.units != "g") {
-        mw <- convert(mw, mw.units, "g")
-    }
-    wts <- sapply(seq_along(mol), function(i) vol * mol[i] * mw[i])
-    if (mw.units != "g") {
-        wts <- convert(wts, "g", mw.units)
-    }
-    recipe$solute.wts=wts
-    class(recipe) <- "recipe"
-    recipe
+dilute <- function()
+
+parse.solvent <- function(x) {
+    parts <- unlist(strsplit(x, ' ', fixed=TRUE))
+    stopifnot(length(parts) == 3)
+    name <- parts[1]
+    amount <- parse.amount(parts[2])
+    units <- unlist(strsplit(parts[3], "/"))
+    solvent <- list(name=name, amount=amount, wt.vol=units)
+    class(solvent) <- "solvent"
+    solvent
 }
 
-summary.recipe <- function(r) {
-    solutes <- paste.list(sapply(seq_along(r$solute.wts), function(i)
-        my.paste(r$solute.wt[i], r$solute.units, r$solute.names[i])))
-    my.paste("Combine", solutes, "and bring to", r$solvent.vol, r$solvent.units, c("with", r$solvent.name))
+parse.solute <- function(x) {
+    parts <- unlist(strsplit(x, ' ', fixed=TRUE))
+    stopifnot(length(parts) == 3)
+    amount <- parse.amount(as.numeric(parts[1]))
+    unit <- parts[2]
+    name <- parts[3]
+    if (substr(unit, 1, 1) == "%") {
+        solute <- list(amount=amount, unit=unit, name=name)
+        if (solute == "%") 
+            class(solute) <- "WV"
+        else
+            class(solute) <- toupper(substring(unit, 2)))
+    }
+    else {
+        unit <- unlist(strsplit('[\[\]]', unit, perl=TRUE))
+        mw <- NA
+        if (length(unit) > 1) {
+            mw <- measure(as.numeric(unit[2]), "g")
+            unit <- unit[1]
+        }
+        solute <- list(amount=measure(amount, unit), name=name, mw=mw)
+        class(solute) <- "Molarity"
+    }
+    solute
+}
+
+#' Get amount of solute for given amount of solvent.
+#' @S3method 
+get.amount.for <- UseMethod("get.amount.for")
+get.amount.for.WW <- function(solute, solvent, vol) {
+    vol <- get.as(parse.measure(vol), solvent$wt.vol[2])
+    wt <- (solute$amount / 100) * solvent$amount * vol$amount
+    measure(wt, solvent$wt.vol[1])
+}
+get.amount.for.WV <- function(solute, solvent, vol) {
+    vol <- get.as(parse.measure(vol), solvent$wt.vol[2])
+    wt <- (solute$amount / 100) * vol$amount
+    measure(wt, solvent$wt.vol[1])
+}
+get.amount.for.VV <- function(solute, solvent, vol) {
+    vol <- parse.measure(vol)
+    wt <- (solute$amount / 100) * vol$amount
+    measure(wt, vol$unit)
+}
+
+#' Get amount of solute for given amount of solvent.
+#' Returns amount in grams if `wt=TRUE` and `!is.na(solute$mw)`,
+#' otherwise returns amount in moles.
+get.amount.for.Molarity <- function(solute, solvent, vol, wt=TRUE) {
+    vol <- parse.measure(vol)
+    moles <- get.as(solute$amount, "mol") * get.as(vol, "L")
+    if (wt && !is.na(solute$mw)) {
+        measure(moles * solute$mw, "g")
+    }
+    else {
+        measure(moles, "moles")
+    }
+}
+
+parse.measure <- function(x) {
+    if (class(x) == 'measure') return(x)
+    parts <- unlist(strsplit(x, ' ', fixed=TRUE))
+    stopifnot(length(parts) == 2)
+    amount <- as.numeric(parts[1])
+    unit <- parts[2]
+    measure(amount, unit)
+}
+
+measure <- function(amount, unit) {
+    structure(list(amount=amount, unit=unit), class="measure")
+}
+
+print.measure(measure) {
+    
+}
+
+get.as <- function(measure, unit) {
+    if (unit == measure$unit) {
+        measure
+    }
+    else {
+        new.amt <- convert(measure$amount, measure$unit, unit)
+        measure(new.amt, unit)
+    }
+}
+
+parse.amount <- function(x) {
+    x <- unlist(strsplit(x), "[:/]", perl=T)
+    if (length(x) == 1) {
+        as.numeric(x)
+    }
+    else {
+        n <- as.numeric(x[1])
+        d <- as.numeric(x[3])
+        if (x[2] == ':') {
+            n / (n+d)
+        }
+        else {
+            n / d
+        }
+    }
 }
 
 my.paste <- function(..., sep=" ", filter.null=TRUE) {
