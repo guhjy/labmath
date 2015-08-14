@@ -70,7 +70,7 @@ Solvent <- setRefClass("Solvent",
 )
 
 # Common solvents
-WATER = Solvent("water 1 g/ml")
+delayedAssign(WATER, Solvent("water 1 g/ml"))
 
 Recipe <- setRefClass("Recipe",
     fields=c(name="character", solutes="data.table", solvent="Solvent"),
