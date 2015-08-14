@@ -28,5 +28,5 @@ dilute <- function(conc=NULL, vol=NULL, final.conc=NULL, final.vol=NULL,
 print.dilution <- function(d, round.pct=0, round.vol=4) {
     print(my.paste(round(d$vol, round.vol), d$vol.units, round(d$conc * 100, round.pct), "%", d$solute.name,
                    "+", round(d$final.vol - d$vol, round.vol), d$vol.units, d$solvent.name,
-                   "=", round(d$final.vol, round.vol), d$vol.units, round(d$final.conc * 100, round.pct), "%", d$solute.name)
+                   "=", round(d$final.vol, round.vol), d$vol.units, round(d$final.conc * 100, round.pct), "%", d$solute.name))
 }
