@@ -79,7 +79,11 @@ Recipe <- setRefClass("Recipe",
         initialize=function(name, solute.table, ..., solvent=WATER) {
             .self$name <- name
             .self$solutes <- solute.table
-            for (solute in list(...)) {
+            solutes <- list(...)
+            if (length(solutes) == 0) {
+                solutes <- list(name)
+            }
+            for (solute in solutes) {
                 .self$add.solute(solute)
             }
             if (is.character(solvent)) {
