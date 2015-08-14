@@ -35,7 +35,7 @@ Measure <- setRefClass("Measure",
                 if (class(x) != "Measure") {
                     x <- Measure(unit=x)
                 }
-                new.amt <- convert(.self$amount, .self$unit, x$unit) / x$amount
+                new.amt <- convertr::convert(.self$amount, .self$unit, x$unit) / x$amount
                 Measure(amount=new.amt, unit=x$unit)
             }
         },
@@ -209,7 +209,7 @@ get.amount.for.conc <- function(solute, solvent, vol, as.wt=TRUE, as.measure=TRU
                list(name=solute$name, amount=wt, unit=vol$unit)
            },
            {
-               moles <- convert(solute$amount, solute$unit, "mol") * vol$get.as("L")$amount
+               moles <- convertr::convert(solute$amount, solute$unit, "mol") * vol$get.as("L")$amount
                if (as.wt && !is.na(solute$mw)) {
                    list(name=solute$name, amount=moles * solute$mw, unit="g")
                }

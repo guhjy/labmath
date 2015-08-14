@@ -10,4 +10,5 @@ Description: Helpers for creating laboratory protocols.
 License: GPL
 Collate: util.R labmath.R dilution.R
 Imports: convertr
+Depends: data.table
 LazyData: TRUE
