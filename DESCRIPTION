@@ -3,7 +3,9 @@ Type: Package
 Title: Helpers for creating laboratory protocols.
 Version: 0.1
 Date: 2015-08-10
-Authors@R: person("John", "Didion", email = "johndidion AT gmail DOT com", role = c("aut", "cre"))
+Authors@R: c(
+    person("John", "Didion", , "code@didion.net", c("aut", "cre"))
+    )
 Description: Helpers for creating laboratory protocols.
 License: GPL
 Collate: util.R, labmath.R, dilution.R
