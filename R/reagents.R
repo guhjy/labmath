@@ -92,9 +92,9 @@ Recipe <- setRefClass("Recipe",
             .self$solvent <- solvent
             .self
         },
-        add.solute=function(str=NULL, name=NULL, amount=NULL, unit=NULL, mw=NULL) {
+        add.solute=function(str=NULL, name=NULL, amount=NULL, unit=NULL, per.vol=NULL, per.unit=NULL, mw=NULL) {
             if (!is.null(str)) {
-                parts <- unlist(strsplit(str, ' ', fixed=TRUE))
+                parts <- stringr::str_match(str, "([\\d\\.]+) (\\w+)(?:/(?:([\\d\\.]+) )?(\\w+))? (.+?)(?: <(\\d+)>)?$")
                 stopifnot(length(parts) == 3)
                 amount <- parse.amount(as.numeric(parts[1]))
                 unit <- parts[2]
@@ -123,33 +123,50 @@ Solution <- setRefClass("Solution",
         #' (see details). Defaults to water.
         #'
         #' @details
-        #' Each solute is a string of the form: "<amount> <unit> <name>",
+        #' Each solute is a string of the form: "amount unit name [<mw>]",
         #' where `amount` is a value that can be converted to a real number
         #' using `as.numeric()`, `unit` is a unit of concentration, and `name`
-        #' is how you want the solute displayed. Valid units are:
+        #' is how you want the solute displayed. Optionally, the molecular weight
+        #' (g/mol) can be provided in angle brackets. Valid units are:
         #' * %ww : percentage of solute as a fraction of total solution weight
         #' * %wv (or just %) : percentage of solute as a fraction of total volume
         #' * %vv : percentage of a liquid solute as a fraction of final
         #' solution volume
-        #' * mol[<mw>] : molarity (moles/L), with the molecular weight of the
-        #' solute specified in brackets. kmol, mmol, and umol are also recognized.
+        #' * mol : molarity (moles/L). kmol, mmol, and umol are also recognized.
+        #' E.g. "5 mmol NaCl <28>" means "5 millimolar NaCl, which has a molecular
+        #' weight of 28 g/mol"
+        #' * unit[/vol unit] : absolute quantity, or quantity per volume. The
+        #' unit can be anything. If it is a recognized SI unit, then an exact
+        #' amount will be calculated when making a mixture, otherwise it will be
+        #' assumed to be a non-divisible entity. For example, some enzyme mixes 
+        #' designed to be added in excess come in tablets or tubes sufficient up to 
+        #' some volume. All of the following are valid:
+        #' ** "1 tablet/50 ml proteinase inhibitor" means "add 1 tablet of proteinase
+        #' inhibitor per 50 ml of solution, rounding up.
+        #' ** "1 g/ml NaCl" is the same as "1 %wv NaCl"
         #'
         #' A solvent is a string of the form "<name> <amount> <w/v units>".
         initialize=function(name, ..., solvent=WATER) {
-            callSuper(name, data.table(name=character(), amount=numeric(), unit=character(), mw=numeric()), ..., solvent=solvent)
+            tab <- data.table(name=character(), amount=numeric(), unit=character(), 
+                              mw=numeric(), per.vol=numeric(), per.unit=character())
+            callSuper(name, tab, ..., solvent=solvent)
             .self
         },
         make.solute=function(name=NULL, amount=NULL, unit=NULL) {
+            
             mw <- NA
+            per.vol <- NA
+            per.unit <- NA
             if (unit == "%") {
                 unit <- "%wv"
             }
             else if (substr(unit, 1, 1) != "%") {
-                unit <- unlist(strsplit(unit, '[\\[\\]]', perl=TRUE))
-                if (length(unit) > 1) {
-                    mw <- as.numeric(unit[2])
-                    unit <- unit[1]
+                parts <- unlist(strsplit(unit, '[<>]', perl=TRUE))
+                if (length(parts) > 1) {
+                    mw <- as.numeric(parts[2])
+                    unit <- parts[1]
                 }
+                
             }
             list(name=name, amount=amount, unit=unit, mw=mw)
         },

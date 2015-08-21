@@ -46,7 +46,7 @@ Protocol <- setRefClass("Protocol",
 Day <- setRefClass("Day",
     methods=list(
         initialize=function(str, protocol, day.num) {
-            steps <- unlist(strsplit(str, "\\s+\\d+\\. ", perl=TRUE))
+            steps <- unlist(strsplit(str, "^\\s*\\d+\\. {2}", perl=TRUE))
             steps <- gsub("[\\n\\s]+", " ", steps, perl=TRUE)
             steps <- steps[!is.na(steps) & nchar(steps) > 0]
             steps <- lapply(seq_along(steps), function(i) {
@@ -60,58 +60,48 @@ Step <- setRefClass("Step",
     fields=c(text="character", timer="Timer", notes=list()),
     methods=list(
         initialize=function(str, protocol, day.num, step.num) {
-            macros <- gregexpr("[#@!\\$]\\{.*?\\}", str)
-            if (macros == -1) {
+            macros <- str_match_all(str, "[#@!\\$]\\{.*?\\}")[[1]]
+            if (length(macros) == 0) {
                 text <- str
             }
             else {
-                start <- macros
-                end <- macros + attr(macros, "match.length") - 1
                 new.str <- ""
-                for (i in seq_along(macros)) {
-                    new.str <- paste0(new.str, substr(str, ifelse(i==1,1,end[i-1]+1)))
-                    mtype <- substr(str, macros[i], macros[i])
-                    mtext <- substr(str, macros[i]+2, macros[i] + attr(macros, 'match.length')[i] - 2)
+                for (i in 1:nrow(macros)) {
+                    new.str <- paste0(new.str, substr(str, ifelse(i==1, 1, end[i-1]+1), start[i]-1))
+                    mtype <- substr(macros[i], 1, 1)
+                    mtext <- substr(macros[i], 3, nchar(macros[i])-1)
                     new.text <- switch(mtype,
                         "#" = {
-                            soln <- regexec("(.+?) OF (.+?)( IN (.+))?", mtext)
-                            soln.type <- "OF"
-                            if (soln < 0) {
-                                soln <- regexec("(.+?) TO (.+?)( IN (.+))?", mtext)
-                                soln.type <- "TO"
-                            }
-                            if (soln < 0) {
+                            soln <- str_match(mtext, "(.+?) (OF|TO) (.+?( IN (.+))|$)")[1,]
+                            if (is.na(soln[1])) {
                                 protocol$add.materials(mtext)
                             }
                             else {
-                                start <- soln
-                                end <- soln + attr(soln, "match.length") - 1
-                                x <- substr(soln, start[2], end[2])
-                                y <- substr(soln, start[3], end[3])
-                                container <- NULL
-                                if (length(start) > 3) {
-                                    container <- substr(soln, start[5], end[5])
-                                }
+                                x <- soln[2]
+                                y <- soln[4]
+                                container <- soln[6]
                                 
-                                if (soln.type == "OF") {
+                                if (soln[3] == "OF") {
                                     # make solution for certain volume, then add to container
                                     solution <- protocol$get.solution(y)
                                     mixture <- solution$make(x)
                                     protocol$add.reagents(mixture, container)
-                                    paste(x, "of", y, "in", container)
+                                    new.text <- paste0(new.text, paste(x, "of", y, "in", container)
                                 }
                                 else {
                                     # dilute solution to appropriate concentration
                                     solution <- protocol$get.solution(x)
                                     if (is.null(container)) {
                                         amount <- solution$dilute.to(y)
-                                        paste0(amount, " per L ", x, " (final concentration ", y, ")")
+                                        new.text <- paste0(new.text,
+                                            paste0(amount, " per L ", x, " (final concentration ", y, ")"))
                                     }
                                     else {
                                         container.vol <- protocol$.get.container.vol(container)
                                         amount <- solution$dilute.to(y, container.vol)
                                         protocol$add.to.container(amount)
-                                        paste0(amount, " ", x, " in ", container, " (final concentration ", y, ")")
+                                        new.text <- paste0(new.text, 
+                                            paste0(amount, " ", x, " in ", container, " (final concentration ", y, ")"))
                                     }
                                 }
                             }
