@@ -1,4 +1,5 @@
 parse.amount <- function(x) {
+    if (is.null(x) || is.na(x)) return(NA)
     i <- regexpr("[:/]", x, perl=T)
     if (i > 0) {
         n <- as.numeric(substr(x, 1, i-1))

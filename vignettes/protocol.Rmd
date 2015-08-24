@@ -1,0 +1,106 @@
+---
+title: "Creating a Protocol"
+author: "John Didion"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    fig_caption: yes  
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Overview
+
+This vignette shows how to use the `labmath` package to create reagents and then use them in a protocol.
+
+A protocol has three parts:
+
+1. Materials table: All of the raw materials you need to execute the program. These may include ingredients for reagents you will make, pre-made reagents, or supplies (e.g. glassware or lab equipment). At minimum, every material needs a name. It is also good practice to provide the molecular weight of solid ingredients and the molarity of liquid ingredients and solutions. Beyond that, you can generally include whatever other information you want in the materials table, e.g. vendor, cost, location in the lab.
+2. Solutions: Recipes for the solutions you need to make for the protocol. Note that if you specify an ingredient in a solution that is not already in the materials list, it will be automatically added. If a solution requires involved preparation (i.e. beyond just "mix all these things together"), you should consider developing a separate protocol for creating that solution.
+3. Protocol steps: Step-by-step instructions for executing the protocol. These steps can include special instructions (macros) which are described in detail later in this vignette.
+
+Note that we use the terms `solution` and `mixture` to mean two slightly different things. A solution is a recipe in which units may be specified in relative terms (e.g. percentages or molarity). A mixture is a specific instance of a solution for a specific total volume. The solvent in a solution is always assumed to be water unless otherwise specified.
+
+# The Materials List
+
+Ultimately, the materials list needs to be provided as an R data.frame or data.table. However, you have some flexibility in how you create your materials list. You could make an excel spreadsheet and then load it into R using the `readxl` package:
+
+```{r eval=FALSE}
+materials <- readxl::read_excel("my-materials.xlsx")
+```
+
+You could create your own data table in R (although this is less intuitive since you have to give the information by column):
+
+```{r eval=FALSE}
+materials <- data.table(
+    name=c("NaCl", "HCl"),
+    vendor=c("ABC Chemicals", "ChemX"),
+    mw=c(28, 18)
+)
+```
+
+Once you have the table loaded in R, you can `save` it to a file and then `load` it any time you need to use it:
+
+```{r eval=FALSE}
+save(materials, file="materials.RData")
+load("materials.RData")
+```
+
+One of the easiest ways to create your materials list is with the `materials` function, which lets you write it out in plain text:
+
+```{r}
+materials("
+    name ; vendor        ; mw
+    NaCl ; ABC Chemicals ; 28
+    HCl  ; ChemX         ; 18  
+")
+```
+
+The first row gives the column names, separated by semicolons. You are free to include any columns you want, but the material name always has to be in a `name` column, and the molecular weight has to be in a `mw` column. You can use whitespace however you want; all leading and trailing whitespace in each field is trimmed off.
+
+The finaly way to specify materials is to do so within your solutions and/or protocol steps. You do this using the material macro. This will be covered more in depth later, but to give you a preview of how macros work, let"s say you have a step that requires stirring a mixture using a stir bar. You could include in your protocol the following:
+
+> In a ${50 ml beaker ; GlassCo}, combine ingredients.
+> Place a ${stir bar ; SitrMaster} in the beaker.
+> Place beaker on a ${magnetic stirrer} and stir for 10 min.
+
+The bits that start with "\${" and end with "}" are macros - in this case, material macros. There are different types of macros, each of which begins with a different character (i.e. in place of the "\$"). The material macro lets you provide the same information as you did using the `materials` function, but doing it this way automatically creates your material list at the same time you"re creating your protocol. Note that you still need to call the `materials` function to provide the column names for the table. Alternatively, you can use keys in all of your material macros, like so:
+
+> In a ${50 ml beaker ; vendor=GlassCo } add 5 g ${HCl ; vendor=ChemX ; mw=18}
+
+The first bit of information is always assumed to be the name, so you don"t need to explicitly write "name=" (although you could if you wanted to). If you always use keys, then the columns in your materials table will be figured out automatically and you don"t have to call `materials`.
+
+# Solutions
+
+As mentioned above, a solution is a recipe for creating a reagent. The ingredients for a solution are generally specified in relative units, such as "%vv" (percentage volume/volume) or "mol" (molarity). Ingredient amounts can also be specified in the more general form of "<amount> <unit>/<amount> <unit volume>", e.g. "1 g/50 ml". Finally, there are some reagents provided in "indivisible" units (e.g. tablets) that are specified in terms of unit/volume. For example, "1 tablet/L". In this case, "tablet" is not a recognized unit, so a mixture made from this recipe will simply include one tablet for each liter (full or partial). Sometimes, not even a volume is required - it is simply intended to use one unit no matter the volume of your reagent.
+
+A solution is specified as a list of ingredients. Each ingredient has the form "amount unit name".
+
+* Amount: Must be one of the following: 
+    * a real number, using a decimal point to separate the integral and fractional parts (if any) and without spaces, commas, or any other delmiters
+    * a fraction, e.g. 1/4
+    * a ratio, e.g. 1:4, taken as amount of solute per amount of solvent (so 1:4 = 1/(1+4) = 0.2).
+* Unit: Any of the following:
+    * %ww : percentage of solute as a fraction of total solution weight
+    * %wv (or just %) : percentage of solute as a fraction of total volume
+    * %vv : percentage of a liquid solute as a fraction of final solution volume
+    * mol : molarity (moles/L). kmol, mmol, and umol are also recognized
+    * unit[/vol unit] : absolute quantity, or quantity per volume. The unit can be anything. If it is a recognized SI unit, then an exact amount will be calculated when making a mixture, otherwise it will be assumed to be a non-divisible entity.
+* Name: The name of the ingredient. Note that this can also be a material macro, in which the molecular weight can be specified. e.g. "5 mmol ${NaCl ; 28}" means "5 millimolar NaCl, which has a molecular weight of 28 g/mol." If a molecular weight is not provided, then final amounts will be given in moles when creating a mixture.
+
+Each solution also has a name and, optionally, a description. You create a solution with the `solution` function:
+
+```{r}
+lysis.buffer <- solution("Lysis buffer", "
+    10 mmol ${Tris ; ABC Chemical ; 121.14}
+	10 mmol ${NaCl ; ChemX        ; 28}
+	0.2 % ${Igepal ; Bob's Chemicals}
+	1 unit protease inhibitor
+", 
+"Buffer used during cell lysis")
+```
+
+In this solution, we specified two ingredients (Tris and NaCl) in terms of molarity and provided molecular weights for each. We also specfied one reagent (Igepal) in terms of % weight/volume and didn't provide a molecular weight. Finally, we specified a reagent (protease inhibitor) with an absolute amount (1 unit). No matter how much lysis buffer we make, we'll always use just one unit of protease inhibitor. Since we didn't use a materal macro for the protease inhibitor, "protease inhibitor" is taken to be the name, without any vendor or molecular weight information supplied.
+

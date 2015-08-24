@@ -94,16 +94,30 @@ Recipe <- setRefClass("Recipe",
         },
         add.solute=function(str=NULL, name=NULL, amount=NULL, unit=NULL, per.vol=NULL, per.unit=NULL, mw=NULL) {
             if (!is.null(str)) {
-                parts <- stringr::str_match(str, "([\\d\\.]+) (\\w+)(?:/(?:([\\d\\.]+) )?(\\w+))? (.+?)(?: <(\\d+)>)?$")
-                stopifnot(length(parts) == 3)
-                amount <- parse.amount(as.numeric(parts[1]))
+                parts <- stringr::str_match(str, "([\\d\\.]+) (\\w+)(?:/(?:([\\d\\.]+) )?(\\w+))? (.+?)(?: <(\\d+)>)?$")[1,-1]
+                if (is.na(parts[1])) {
+                    stop(paste("Invalid solute", str))
+                }
+                amount <- parse.amount(parts[1])
                 unit <- parts[2]
-                name <- parts[3]
+                per.unit <- parts[4]
+                if (is.na(parts[3])) {
+                    per.vol <- 1
+                }
+                else {
+                    per.vol <- parse.amount(parts[3])
+                }
+                name <- parts[5]
+                mw <- NA
+                if (!is.na(parts[6])) {
+                    mw <- as.numeric(parts[6])
+                }
             }
-            .self$solutes <- rbindlist(list(.self$solutes, .self$make.solute(name, amount, unit)))
+            .self$solutes <- rbindlist(list(.self$solutes, 
+                .self$make.solute(name, amount, unit, per.vol, per.unit, mw)))
         },
-        make.solute=function(name, amount, unit) {
-            list(name=name, amount=amount, unit=unit)
+        make.solute=function(name, amount, unit, per.vol, per.unit, mw) {
+            list(name=name, amount=amount, unit=unit, per.vol=per.vol, per.unit=per.unit, mw=mw)
         },
         format=function(markdown=FALSE) {
             .self$name
@@ -152,23 +166,11 @@ Solution <- setRefClass("Solution",
             callSuper(name, tab, ..., solvent=solvent)
             .self
         },
-        make.solute=function(name=NULL, amount=NULL, unit=NULL) {
-            
-            mw <- NA
-            per.vol <- NA
-            per.unit <- NA
+        make.solute=function(name, amount, unit, per.vol=NA, per.unit=NA, mw=NA) {
             if (unit == "%") {
                 unit <- "%wv"
             }
-            else if (substr(unit, 1, 1) != "%") {
-                parts <- unlist(strsplit(unit, '[<>]', perl=TRUE))
-                if (length(parts) > 1) {
-                    mw <- as.numeric(parts[2])
-                    unit <- parts[1]
-                }
-                
-            }
-            list(name=name, amount=amount, unit=unit, mw=mw)
+            list(name=name, amount=amount, unit=unit, per.vol=per.vol, per.unit=per.unit, mw=mw)
         },
         get.amount.for=function(solute, vol, as.wt=TRUE) {
             solute <- .self$solutes[eval(solute),]
@@ -229,7 +231,7 @@ get.amount.for.conc <- function(solute, solvent, vol, as.wt=TRUE, as.measure=TRU
                wt <- (solute$amount / 100) * vol$amount
                list(name=solute$name, amount=wt, unit=vol$unit)
            },
-           {
+           mol=, kmol=, mmol=, umol={
                moles <- convertr::convert(solute$amount, solute$unit, "mol") * vol$get.as("L")$amount
                if (as.wt && !is.na(solute$mw)) {
                    list(name=solute$name, amount=moles * solute$mw, unit="g")
@@ -237,10 +239,34 @@ get.amount.for.conc <- function(solute, solvent, vol, as.wt=TRUE, as.measure=TRU
                else {
                    list(name=solute$name, amount=moles, unit="moles")
                } 
+           }, # else
+           {
+               # absolute amount
+               if (is.na(solute$per.vol)) {
+                   list(name=name, amount=solute$amount, unit=solute$unit)
+               }
+               # unit/volume
+               else {
+                   per.vol <- Measure(amount=solute$per.vol, unit=solute$per.unit)
+                   num.vols <- vol$amount / per.vol$get.as(vol$unit)$amount
+                   # if the unit is valid SI, we compute the exact amount, otherwise
+                   # the ingredient is assumed to be indivisible, i.e. add the amount
+                   # for every per.vol amount of volume, rounding up.
+                   # TODO: change to use is.supported.unit() when available
+                   is.valid < tryCatch({
+                       convertr::convert(1, solute$unit, solute$unit)
+                       TRUE
+                   }, error=function(e) FALSE)
+                   if (!is.valid) {
+                       num.vols <- ceiling(num.vols)
+                   }
+                   amount <- solute$amount * num.vols
+                   list(name=name, amount=amount, unit=solute$unit)
+               }
            }
     )
     if (as.measure) {
-        do.call(Measure, retval)
+        Measure(amount=retval$amount, unit=retval$unit)
     }
     else {
         retval

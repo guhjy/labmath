@@ -60,7 +60,7 @@ Step <- setRefClass("Step",
     fields=c(text="character", timer="Timer", notes=list()),
     methods=list(
         initialize=function(str, protocol, day.num, step.num) {
-            macros <- str_match_all(str, "[#@!\\$]\\{.*?\\}")[[1]]
+            macros <- stringr::str_match_all(str, "[#@!\\$]\\{.*?\\}")[[1]]
             if (length(macros) == 0) {
                 text <- str
             }
@@ -72,7 +72,7 @@ Step <- setRefClass("Step",
                     mtext <- substr(macros[i], 3, nchar(macros[i])-1)
                     new.text <- switch(mtype,
                         "#" = {
-                            soln <- str_match(mtext, "(.+?) (OF|TO) (.+?( IN (.+))|$)")[1,]
+                            soln <- stringr::str_match(mtext, "(.+?) (OF|TO) (.+?( IN (.+))|$)")[1,]
                             if (is.na(soln[1])) {
                                 protocol$add.materials(mtext)
                             }
